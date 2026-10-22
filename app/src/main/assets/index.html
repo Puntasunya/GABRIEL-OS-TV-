@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>GabrielOS TV</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0b0f19; }
+  body {
+    color: white;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  }
+
+  .bg {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: radial-gradient(circle at 50% 30%, #1e293b, #070a12);
+  }
+
+  /* เวที 1920x1080 ย่อ/ขยายให้พอดีทุกหน้าจอ (TV = 1:1, มือถือ = ย่อส่วน) */
+  .stage {
+    position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
+    transform-origin: 0 0; overflow: hidden;
+  }
+
+  .top-bar {
+    position: absolute; top: 50px; left: 60px; right: 60px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .brand {
+    font-size: 32px; font-weight: 800; letter-spacing: -0.5px;
+    background: linear-gradient(to right, #ffffff, #94a3b8);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .status { display: flex; align-items: center; font-size: 20px; color: #cbd5e1; font-weight: 500; }
+  .status > * + * { margin-left: 16px; }
+  .net { display: flex; }
+  .net svg { display: block; }
+
+  .app-label-container {
+    position: absolute; bottom: 200px; left: 60px; max-width: 600px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .app-name { font-size: 52px; font-weight: 800; margin: 0 0 8px 0; letter-spacing: -1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .app-desc { font-size: 22px; color: #94a3b8; margin: 0; line-height: 1.4; }
+
+  .dock { position: absolute; left: 0; bottom: 0; display: flex; padding: 0 60px 60px 60px; align-items: center; }
+  .dock > * + * { margin-left: 28px; }
+  .app-icon {
+    flex: 0 0 auto; width: 96px; height: 96px; border-radius: 50%;
+    display: flex; justify-content: center; align-items: center;
+    font-size: 36px; font-weight: bold;
+    transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    cursor: pointer; background: #1e293b; color: white;
+    border: 2px solid transparent; overflow: hidden;
+  }
+  .app-icon svg { display: block; }
+  .app-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .app-icon.focused {
+    transform: scale(1.25); border-color: #ffffff;
+    background: var(--c, #3b82f6);
+    box-shadow: 0 12px 35px var(--g, rgba(59, 130, 246, 0.6));
+  }
+
+  /* ===== All Apps drawer (frosted glass) ===== */
+  .drawer {
+    position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; z-index: 20;
+    padding: 60px 90px 0 90px;
+    background: rgba(7, 10, 18, 0.93);
+    opacity: 0; visibility: hidden;
+    transition: opacity 0.25s ease, visibility 0.25s;
+  }
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .drawer {
+      background: rgba(15, 23, 42, 0.55);
+      -webkit-backdrop-filter: blur(40px) saturate(140%);
+      backdrop-filter: blur(40px) saturate(140%);
+    }
+  }
+  .drawer.open { opacity: 1; visibility: visible; }
+  .drawer-head { display: flex; align-items: center; justify-content: space-between; height: 90px; padding: 0 10px; }
+  .drawer-title { margin: 0; font-size: 44px; font-weight: 800; letter-spacing: -1px; }
+  .drawer-right { display: flex; align-items: center; }
+  .drawer-hint { font-size: 20px; color: #94a3b8; }
+  .drawer-close {
+    width: 64px; height: 64px; border-radius: 50%; margin-left: 24px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.1);
+  }
+  .grid {
+    position: relative; height: calc(100% - 90px); overflow-y: auto; overflow-x: hidden;
+    padding: 30px 10px 80px 10px;
+    display: grid; grid-template-columns: repeat(7, 1fr); grid-gap: 30px 16px;
+    align-content: start;
+  }
+  .grid::-webkit-scrollbar { display: none; }
+  .tile {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 22px 8px 18px 8px; border-radius: 28px; cursor: pointer;
+    border: 2px solid transparent;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .t-wrap { position: relative; width: 104px; height: 104px; }
+  .t-icon {
+    width: 104px; height: 104px; border-radius: 50%; overflow: hidden;
+    background: #1e293b; color: #fff; border: 2px solid transparent;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .t-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .t-icon svg { display: block; }
+  .t-name {
+    margin-top: 18px; font-size: 22px; font-weight: 600; color: #cbd5e1; text-align: center;
+    max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .badge {
+    position: absolute; top: -6px; right: -6px; width: 34px; height: 34px; border-radius: 50%;
+    background: #3b82f6; border: 3px solid #0f172a; display: flex; align-items: center; justify-content: center;
+  }
+  .tile.focused { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.22); }
+  .tile.focused .t-icon {
+    transform: scale(1.18); border-color: #fff;
+    box-shadow: 0 12px 35px var(--g, rgba(59, 130, 246, 0.55));
+  }
+  .tile.focused .t-name { color: #fff; }
+
+  /* ===== Context menu ===== */
+  .menu-wrap {
+    position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; z-index: 30;
+    display: flex; justify-content: center; align-items: center;
+    background: rgba(0, 0, 0, 0.55);
+    opacity: 0; visibility: hidden; transition: opacity 0.2s, visibility 0.2s;
+  }
+  .menu-wrap.open { opacity: 1; visibility: visible; }
+  .menu {
+    width: 560px; padding: 36px; border-radius: 32px;
+    background: rgba(30, 41, 59, 0.97); border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  }
+  .menu-head { display: flex; align-items: center; margin-bottom: 20px; }
+  .menu-head .mi {
+    flex: 0 0 auto; width: 64px; height: 64px; border-radius: 50%; overflow: hidden; margin-right: 18px;
+    background: #0b0f19; display: flex; align-items: center; justify-content: center;
+  }
+  .menu-head .mi img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .menu-head .mi svg { display: block; }
+  .menu-title { font-size: 30px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .menu-item {
+    margin-top: 8px; padding: 20px 24px; border-radius: 18px; font-size: 26px; font-weight: 600;
+    color: #cbd5e1; cursor: pointer;
+  }
+  .menu-item.focused { background: #ffffff; color: #0b0f19; }
+  .menu-item.disabled { opacity: 0.45; }
+
+  .toast {
+    position: absolute; top: 140px; left: 50%; z-index: 40;
+    transform: translate(-50%, 10px); padding: 16px 34px; border-radius: 999px;
+    background: rgba(30, 41, 59, 0.96); border: 1px solid rgba(255, 255, 255, 0.12);
+    font-size: 24px; color: #fff; opacity: 0; pointer-events: none; white-space: nowrap;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+  <div class="bg"></div>
+
+  <div class="stage" id="stage">
+    <div class="top-bar">
+      <div class="brand">GabrielOS TV</div>
+      <div class="status">
+        <span class="net" id="net"></span>
+        <span id="clock">08:45</span>
+        <span id="date" style="opacity: 0.6;">Thu, 22 Oct</span>
+      </div>
+    </div>
+
+    <div class="app-label-container" id="labelBox">
+      <h1 class="app-name" id="appName">Netflix</h1>
+      <p class="app-desc" id="appDesc">ภาพยนตร์ ซีรีส์ และความบันเทิงระดับโลก รับชมได้ไม่จำกัด</p>
+    </div>
+
+    <div class="dock" id="dock"></div>
+
+    <div class="drawer" id="drawer">
+      <div class="drawer-head">
+        <h2 class="drawer-title">แอปทั้งหมด</h2>
+        <div class="drawer-right">
+          <span class="drawer-hint">กด OK ค้างไว้เพื่อ Pin to Home · กด Back เพื่อปิด</span>
+          <div class="drawer-close" id="drawerClose"></div>
+        </div>
+      </div>
+      <div class="grid" id="grid"></div>
+    </div>
+
+    <div class="menu-wrap" id="menuWrap"><div class="menu" id="menu"></div></div>
+    <div class="toast" id="toast"></div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  var NATIVE = (typeof window.Android !== 'undefined');
+  var MAX_PINS = 8, COLS = 7, LONG_MS = 650;
+
+  /* ---------- Data ---------- */
+  var DEFAULTS = [
+    { id: 'netflix', name: 'Netflix', desc: 'ภาพยนตร์ ซีรีส์ และความบันเทิงระดับโลก รับชมได้ไม่จำกัด', glyph: 'N', color: '#E50914',
+      pkgs: ['com.netflix.ninja', 'com.netflix.mediaclient'] },
+    { id: 'youtube', name: 'YouTube', desc: 'วิดีโอ เพลง และสตรีมมิ่งสด', glyph: 'play', color: '#FF0000',
+      pkgs: ['com.google.android.youtube.tv', 'com.google.android.youtube'] },
+    { id: 'spotify', name: 'Spotify', desc: 'เพลงและพอดแคสต์สำหรับทุกช่วงเวลาของคุณ', glyph: 'music', color: '#1DB954',
+      pkgs: ['com.spotify.tv.android', 'com.spotify.music'] },
+    { id: 'prime', name: 'Prime Video', desc: 'รับชม Amazon Originals และภาพยนตร์ยอดฮิต', glyph: 'check', color: '#00A8E1',
+      pkgs: ['com.amazon.amazonvideo.livingroom', 'com.amazon.avod.thirdpartyclient'] }
+  ];
+  var ALL = { id: 'all', name: 'แอปทั้งหมด', desc: 'เรียกดูแอปพลิเคชันและการตั้งค่าทั้งหมด', glyph: 'grid', color: '#3b82f6' };
+  var BUILTINS = [
+    { pkg: 'gos:settings', label: 'การตั้งค่า', icon: '', builtin: true, svg: 'gear' },
+    { pkg: 'gos:wifi', label: 'Wi-Fi', icon: '', builtin: true, svg: 'wifiBig' }
+  ];
+
+  var ICON = {
+    play: '<svg width="46" height="46" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12.5-7.5z"/></svg>',
+    music: '<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3" fill="currentColor"/><circle cx="17" cy="16" r="3" fill="currentColor"/></svg>',
+    check: '<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5L19.5 7"/></svg>',
+    grid: '<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><path d="M12 3.5v17M3.5 12h17"/></svg>',
+    gear: '<svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+    wifiBig: '<svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>',
+    pin: '<svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z"/></svg>',
+    close: '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>'
+  };
+  var NET = {
+    wifi: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>',
+    ethernet: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="5"/><rect x="2" y="16" width="6" height="5"/><rect x="16" y="16" width="6" height="5"/><path d="M12 8v4M5 16v-4h14v4"/></svg>',
+    none: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="opacity:.45"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line><line x1="3" y1="3" x2="21" y2="21"></line></svg>'
+  };
+
+  /* ---------- State ---------- */
+  var state = {
+    mode: 'home',            // home | drawer | menu
+    focus: 0, apps: [], pins: [], dockItems: [],
+    drawerList: [], drawerFocus: 0,
+    menuItems: [], menuFocus: 0, menuApp: null, menuFrom: 'drawer'
+  };
+
+  function $(id) { return document.getElementById(id); }
+  var stage = $('stage'), dock = $('dock'), nameEl = $('appName'), descEl = $('appDesc'), labelBox = $('labelBox'),
+      drawer = $('drawer'), grid = $('grid'), menuWrap = $('menuWrap'), menuEl = $('menu'), toastEl = $('toast'),
+      netEl = $('net'), clockEl = $('clock'), dateEl = $('date');
+  $('drawerClose').innerHTML = ICON.close;
+
+  /* ---------- Scale stage ---------- */
+  function fit() {
+    var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    var x = (window.innerWidth - 1920 * s) / 2, y = (window.innerHeight - 1080 * s) / 2;
+    stage.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + s + ')';
+  }
+  window.addEventListener('resize', fit);
+  fit();
+
+  /* ---------- Helpers ---------- */
+  function rgba(hex, a) {
+    var h = hex.replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    var n = parseInt(h, 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+  function hex2(n) { return (n < 16 ? '0' : '') + n.toString(16); }
+
+  var colorCache = {};
+  function iconColor(app, cb) {
+    var key = app.pkg;
+    if (colorCache[key]) { cb(colorCache[key]); return; }
+    if (!app.icon) { cb('#3b82f6'); return; }
+    var img = new Image();
+    img.onload = function () {
+      var out = '#3b82f6';
+      try {
+        var c = document.createElement('canvas'); c.width = 16; c.height = 16;
+        var x = c.getContext('2d'); x.drawImage(img, 0, 0, 16, 16);
+        var d = x.getImageData(0, 0, 16, 16).data, r = 0, g = 0, b = 0, w = 0;
+        for (var i = 0; i < d.length; i += 4) {
+          if (d[i + 3] < 128) continue;
+          var mx = Math.max(d[i], d[i + 1], d[i + 2]), mn = Math.min(d[i], d[i + 1], d[i + 2]);
+          var s = (mx - mn) + 8;
+          r += d[i] * s; g += d[i + 1] * s; b += d[i + 2] * s; w += s;
+        }
+        if (w > 0) {
+          r = Math.round(r / w); g = Math.round(g / w); b = Math.round(b / w);
+          out = (Math.max(r, g, b) < 70) ? '#94a3b8' : ('#' + hex2(r) + hex2(g) + hex2(b));
+        }
+      } catch (e) {}
+      colorCache[key] = out; cb(out);
+    };
+    img.onerror = function () { colorCache[key] = '#3b82f6'; cb('#3b82f6'); };
+    img.src = app.icon;
+  }
+
+  var toastT = null;
+  function toast(msg) {
+    toastEl.textContent = msg; toastEl.classList.add('show');
+    clearTimeout(toastT);
+    toastT = setTimeout(function () { toastEl.classList.remove('show'); }, 2600);
+  }
+
+  /* กด/แตะ + กดค้าง (สำหรับมือถือและเมาส์) */
+  function bindPress(el, onTap, onLong) {
+    var t = null, fired = false, sx = 0, sy = 0;
+    el.addEventListener('pointerdown', function (e) {
+      fired = false; sx = e.clientX; sy = e.clientY;
+      clearTimeout(t);
+      t = setTimeout(function () { fired = true; onLong(); }, 600);
+    });
+    el.addEventListener('pointermove', function (e) {
+      if (Math.abs(e.clientX - sx) > 12 || Math.abs(e.clientY - sy) > 12) clearTimeout(t);
+    });
+    el.addEventListener('pointerup', function () { clearTimeout(t); });
+    el.addEventListener('pointercancel', function () { clearTimeout(t); });
+    el.addEventListener('pointerleave', function () { clearTimeout(t); });
+    el.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    el.addEventListener('click', function () {
+      if (fired) { fired = false; return; }
+      onTap();
+    });
+  }
+
+  /* ---------- Storage (Pins) ---------- */
+  function loadPins() {
+    try {
+      var raw = NATIVE ? window.Android.loadPins() : localStorage.getItem('gos.pins');
+      var a = JSON.parse(raw || '[]');
+      return Array.isArray(a) ? a : [];
+    } catch (e) { return []; }
+  }
+  function savePins() {
+    var s = JSON.stringify(state.pins);
+    try { if (NATIVE) window.Android.savePins(s); else localStorage.setItem('gos.pins', s); } catch (e) {}
+  }
+  function findApp(pkg) {
+    for (var i = 0; i < state.apps.length; i++) if (state.apps[i].pkg === pkg) return state.apps[i];
+    return null;
+  }
+  function isPinned(pkg) {
+    for (var i = 0; i < state.pins.length; i++) if (state.pins[i].pkg === pkg) return true;
+    return false;
+  }
+  function isDefaultPkg(pkg) {
+    for (var i = 0; i < DEFAULTS.length; i++) if (DEFAULTS[i].pkgs.indexOf(pkg) >= 0) return true;
+    return false;
+  }
+
+  /* ---------- Launch ---------- */
+  function launchPkg(pkg, label) {
+    if (NATIVE) { if (!window.Android.launch(pkg)) toast('เปิด ' + label + ' ไม่ได้'); }
+    else toast('(Demo) เปิด ' + label + ' · ' + pkg);
+  }
+  function launchDefault(it) {
+    if (NATIVE) {
+      for (var i = 0; i < it.pkgs.length; i++) { if (window.Android.launch(it.pkgs[i])) return; }
+      toast(it.name + ' ยังไม่ได้ติดตั้ง — กำลังเปิด Play Store');
+      window.Android.openStore(it.pkgs[0]);
+    } else toast('(Demo) เปิด ' + it.name);
+  }
+
+  /* ---------- Dock ---------- */
+  function buildDock() {
+    var items = DEFAULTS.map(function (d) {
+      return { kind: 'default', id: d.id, name: d.name, desc: d.desc, glyph: d.glyph, color: d.color, pkgs: d.pkgs };
+    });
+    state.pins.forEach(function (p) {
+      var a = findApp(p.pkg);
+      if (a) items.push({ kind: 'pin', id: 'pin:' + a.pkg, name: a.label, desc: 'แอปที่ปักหมุดไว้ในหน้าหลัก', color: '#3b82f6', app: a });
+    });
+    items.push({ kind: 'all', id: ALL.id, name: ALL.name, desc: ALL.desc, glyph: ALL.glyph, color: ALL.color });
+    return items;
+  }
+
+  function renderDock() {
+    state.dockItems = buildDock();
+    if (state.focus > state.dockItems.length - 1) state.focus = state.dockItems.length - 1;
+    dock.innerHTML = '';
+    state.dockItems.forEach(function (it, i) {
+      var el = document.createElement('div');
+      el.className = 'app-icon' + (i === state.focus ? ' focused' : '');
+      el.style.setProperty('--c', it.color);
+      el.style.setProperty('--g', rgba(it.color, 0.6));
+      if (it.kind === 'pin') {
+        if (it.app.icon) {
+          var im = new Image(); im.src = it.app.icon; im.draggable = false; el.appendChild(im);
+        } else el.textContent = it.app.label.charAt(0);
+        iconColor(it.app, function (c) { el.style.setProperty('--g', rgba(c, 0.6)); });
+      } else if (it.glyph === 'N') {
+        el.textContent = 'N';
+      } else {
+        el.innerHTML = ICON[it.glyph];
+      }
+      bindPress(el,
+        function () { setFocus(i); activateDock(i); },
+        function () { if (it.kind === 'pin') { setFocus(i); openMenu(it.app, 'dock'); } });
+      dock.appendChild(el);
+    });
+  }
+
+  var labelT = null;
+  function setLabelNow() {
+    var it = state.dockItems[state.focus]; if (!it) return;
+    nameEl.textContent = it.name; descEl.textContent = it.desc;
+    labelBox.style.opacity = '1'; labelBox.style.transform = 'translateY(0)';
+  }
+  function updateLabel() {
+    var it = state.dockItems[state.focus]; if (!it) return;
+    labelBox.style.opacity = '0';
+    labelBox.style.transform = 'translateY(10px)';
+    clearTimeout(labelT);
+    labelT = setTimeout(function () {
+      nameEl.textContent = it.name; descEl.textContent = it.desc;
+      labelBox.style.opacity = '1'; labelBox.style.transform = 'translateY(0)';
+    }, 150);
+  }
+
+  function setFocus(i) {
+    if (i === state.focus) return;
+    var kids = dock.children;
+    if (kids[state.focus]) kids[state.focus].classList.remove('focused');
+    state.focus = i;
+    if (kids[i]) kids[i].classList.add('focused');
+    updateLabel();
+  }
+
+  function activateDock(i) {
+    var it = state.dockItems[i]; if (!it) return;
+    if (it.kind === 'all') openDrawer();
+    else if (it.kind === 'pin') launchPkg(it.app.pkg, it.app.label);
+    else launchDefault(it);
+  }
+
+  /* ---------- Drawer ---------- */
+  function allApps() { return BUILTINS.concat(state.apps); }
+
+  function buildGrid() {
+    state.drawerList = allApps();
+    grid.innerHTML = '';
+    state.drawerList.forEach(function (a, i) {
+      var t = document.createElement('div'); t.className = 'tile'; t.setAttribute('data-pkg', a.pkg);
+      var wrap = document.createElement('div'); wrap.className = 't-wrap';
+      var ic = document.createElement('div'); ic.className = 't-icon';
+      if (a.icon) { var im = new Image(); im.src = a.icon; im.draggable = false; ic.appendChild(im); }
+      else if (a.svg) { ic.innerHTML = ICON[a.svg]; }
+      else { ic.textContent = a.label.charAt(0); }
+      wrap.appendChild(ic);
+      var nm = document.createElement('div'); nm.className = 't-name'; nm.textContent = a.label;
+      t.appendChild(wrap); t.appendChild(nm);
+      bindPress(t,
+        function () { setDrawerFocus(i); closeDrawer(); launchPkg(a.pkg, a.label); },
+        function () { setDrawerFocus(i); openMenu(a, 'drawer'); });
+      grid.appendChild(t);
+    });
+    refreshBadges();
+  }
+
+  function refreshBadges() {
+    var tiles = grid.children;
+    for (var i = 0; i < tiles.length; i++) {
+      var pkg = tiles[i].getAttribute('data-pkg');
+      var wrap = tiles[i].firstChild;
+      var old = wrap.querySelector('.badge'); if (old) wrap.removeChild(old);
+      if (isPinned(pkg) || isDefaultPkg(pkg)) {
+        var b = document.createElement('div'); b.className = 'badge'; b.innerHTML = ICON.pin; wrap.appendChild(b);
+      }
+    }
+  }
+
+  function setDrawerFocus(i) {
+    var tiles = grid.children;
+    if (tiles[state.drawerFocus]) tiles[state.drawerFocus].classList.remove('focused');
+    state.drawerFocus = i;
+    var el = tiles[i]; if (!el) return;
+    el.classList.add('focused');
+    var a = state.drawerList[i];
+    iconColor(a, function (c) { el.style.setProperty('--g', rgba(c, 0.6)); });
+    var top = el.offsetTop, bottom = top + el.offsetHeight;
+    if (top < grid.scrollTop + 10) grid.scrollTop = Math.max(0, top - 20);
+    else if (bottom > grid.scrollTop + grid.clientHeight - 10) grid.scrollTop = bottom - grid.clientHeight + 40;
+  }
+
+  function openDrawer() {
+    state.mode = 'drawer';
+    buildGrid();
+    grid.scrollTop = 0;
+    state.drawerFocus = 0;
+    setDrawerFocus(0);
+    drawer.classList.add('open');
+  }
+  function closeDrawer() {
+    state.mode = 'home';
+    drawer.classList.remove('open');
+  }
+  $('drawerClose').addEventListener('click', function () { if (state.mode === 'drawer') closeDrawer(); });
+
+  function navDrawer(k) {
+    var n = state.drawerList.length, i = state.drawerFocus;
+    if (k === 'left') i = Math.max(0, i - 1);
+    else if (k === 'right') i = Math.min(n - 1, i + 1);
+    else if (k === 'up') { if (i - COLS >= 0) i -= COLS; }
+    else if (k === 'down') {
+      if (i + COLS < n) i += COLS;
+      else if (Math.floor(i / COLS) < Math.floor((n - 1) / COLS)) i = n - 1;
+    }
+    if (i !== state.drawerFocus) setDrawerFocus(i);
+  }
+
+  /* ---------- Pin / Unpin ---------- */
+  function pinApp(a) {
+    if (state.pins.length >= MAX_PINS) { toast('หน้าหลักเต็มแล้ว (ปักหมุดได้สูงสุด ' + MAX_PINS + ' แอป)'); return; }
+    if (isPinned(a.pkg)) return;
+    state.pins.push({ pkg: a.pkg, label: a.label });
+    savePins(); renderDock(); refreshBadges();
+    toast('ปักหมุด ' + a.label + ' ไว้ที่หน้าหลักแล้ว');
+  }
+  function unpinApp(a) {
+    state.pins = state.pins.filter(function (p) { return p.pkg !== a.pkg; });
+    savePins(); renderDock(); setLabelNow(); refreshBadges();
+    toast('เลิกปักหมุด ' + a.label + ' แล้ว');
+  }
+
+  /* ---------- Context menu ---------- */
+  function openMenu(app, from) {
+    var items = [];
+    items.push({ label: 'Open', run: function () {
+      closeMenu(); if (from === 'drawer') closeDrawer(); launchPkg(app.pkg, app.label);
+    } });
+    if (!app.builtin) {
+      if (isDefaultPkg(app.pkg)) {
+        items.push({ label: 'Already on Home', disabled: true, run: function () { closeMenu(); toast(app.label + ' อยู่ในหน้าหลักอยู่แล้ว'); } });
+      } else if (isPinned(app.pkg)) {
+        items.push({ label: 'Unpin from Home', run: function () { closeMenu(); unpinApp(app); } });
+      } else {
+        items.push({ label: 'Pin to Home', run: function () { closeMenu(); pinApp(app); } });
+      }
+      items.push({ label: 'App Info', run: function () {
+        closeMenu(); if (NATIVE) window.Android.appInfo(app.pkg); else toast('(Demo) App Info · ' + app.pkg);
+      } });
+    }
+    state.menuItems = items; state.menuFocus = 0; state.menuApp = app; state.menuFrom = from;
+
+    menuEl.innerHTML = '';
+    var head = document.createElement('div'); head.className = 'menu-head';
+    var mi = document.createElement('div'); mi.className = 'mi';
+    if (app.icon) { var im = new Image(); im.src = app.icon; mi.appendChild(im); }
+    else if (app.svg) { mi.innerHTML = ICON[app.svg]; mi.style.color = '#fff'; mi.firstChild.setAttribute('width', 36); mi.firstChild.setAttribute('height', 36); }
+    var tt = document.createElement('div'); tt.className = 'menu-title'; tt.textContent = app.label;
+    head.appendChild(mi); head.appendChild(tt); menuEl.appendChild(head);
+
+    items.forEach(function (it, i) {
+      var el = document.createElement('div');
+      el.className = 'menu-item' + (i === 0 ? ' focused' : '') + (it.disabled ? ' disabled' : '');
+      el.textContent = it.label;
+      el.addEventListener('click', function () { state.menuFocus = i; it.run(); });
+      menuEl.appendChild(el);
+    });
+    state.mode = 'menu';
+    menuWrap.classList.add('open');
+  }
+  function closeMenu() {
+    menuWrap.classList.remove('open');
+    state.mode = (state.menuFrom === 'dock') ? 'home' : 'drawer';
+  }
+  menuWrap.addEventListener('click', function (e) { if (e.target === menuWrap && state.mode === 'menu') closeMenu(); });
+
+  function navMenu(k) {
+    var n = state.menuItems.length, i = state.menuFocus;
+    if (k === 'up') i = Math.max(0, i - 1);
+    else if (k === 'down') i = Math.min(n - 1, i + 1);
+    if (i === state.menuFocus) return;
+    var kids = menuEl.querySelectorAll('.menu-item');
+    kids[state.menuFocus].classList.remove('focused');
+    state.menuFocus = i;
+    kids[i].classList.add('focused');
+  }
+
+  /* ---------- Remote / keyboard ---------- */
+  function keyName(e) {
+    switch (e.key) {
+      case 'ArrowLeft': return 'left';
+      case 'ArrowRight': return 'right';
+      case 'ArrowUp': return 'up';
+      case 'ArrowDown': return 'down';
+      case 'Enter': return 'enter';
+      case 'Escape': case 'Backspace': case 'BrowserBack': return 'back';
+    }
+    switch (e.keyCode) {
+      case 37: return 'left';
+      case 39: return 'right';
+      case 38: return 'up';
+      case 40: return 'down';
+      case 13: case 23: return 'enter';
+      case 27: return 'back';
+    }
+    return null;
+  }
+
+  function nav(k) {
+    if (state.mode === 'home') {
+      if (k === 'left') setFocus(Math.max(0, state.focus - 1));
+      else if (k === 'right') setFocus(Math.min(state.dockItems.length - 1, state.focus + 1));
+    } else if (state.mode === 'drawer') navDrawer(k);
+    else if (state.mode === 'menu') navMenu(k);
+  }
+
+  function back() {
+    if (state.mode === 'menu') closeMenu();
+    else if (state.mode === 'drawer') closeDrawer();
+  }
+
+  function onShort() {
+    if (state.mode === 'home') activateDock(state.focus);
+    else if (state.mode === 'drawer') {
+      var a = state.drawerList[state.drawerFocus];
+      if (a) { closeDrawer(); launchPkg(a.pkg, a.label); }
+    } else if (state.mode === 'menu') {
+      var it = state.menuItems[state.menuFocus]; if (it) it.run();
+    }
+  }
+  function onLong() {
+    if (state.mode === 'home') {
+      var it = state.dockItems[state.focus];
+      if (it && it.kind === 'pin') openMenu(it.app, 'dock');
+    } else if (state.mode === 'drawer') {
+      var a = state.drawerList[state.drawerFocus];
+      if (a) openMenu(a, 'drawer');
+    }
+  }
+
+  var pressT = null, longFired = false, enterDown = false;
+  function resetPress() { clearTimeout(pressT); enterDown = false; longFired = false; }
+
+  document.addEventListener('keydown', function (e) {
+    var k = keyName(e); if (!k) return;
+    e.preventDefault();
+    if (k === 'enter') {
+      if (enterDown) return;
+      enterDown = true; longFired = false;
+      clearTimeout(pressT);
+      pressT = setTimeout(function () { longFired = true; onLong(); }, LONG_MS);
+      return;
+    }
+    if (k === 'back') { back(); return; }
+    nav(k);
+  });
+  document.addEventListener('keyup', function (e) {
+    if (keyName(e) !== 'enter') return;
+    e.preventDefault();
+    if (!enterDown) return;
+    clearTimeout(pressT); enterDown = false;
+    if (!longFired) onShort();
+    longFired = false;
+  });
+  window.addEventListener('blur', resetPress);
+
+  /* ---------- Clock / Network ---------- */
+  var DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function tick() {
+    var d = new Date();
+    clockEl.textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    dateEl.textContent = DAYS[d.getDay()] + ', ' + d.getDate() + ' ' + MONTHS[d.getMonth()];
+  }
+  function refreshNet() {
+    var t = 'wifi';
+    if (NATIVE) { try { t = window.Android.network(); } catch (e) {} }
+    netEl.innerHTML = NET[t === 'ethernet' ? 'ethernet' : (t === 'none' ? 'none' : 'wifi')];
+  }
+
+  /* ---------- Native callbacks ---------- */
+  window.GOS = {
+    setApps: function (list) {
+      var prev = state.dockItems[state.focus] ? state.dockItems[state.focus].id : null;
+      state.apps = list || [];
+      if (state.apps.length) {
+        var before = state.pins.length;
+        state.pins = state.pins.filter(function (p) { return !!findApp(p.pkg); });
+        if (state.pins.length !== before) savePins();
+      }
+      var items = buildDock();
+      if (prev) { for (var i = 0; i < items.length; i++) if (items[i].id === prev) { state.focus = i; break; } }
+      renderDock(); setLabelNow();
+      if (state.mode === 'drawer') {
+        var keep = state.drawerFocus; buildGrid();
+        setDrawerFocus(Math.min(keep, state.drawerList.length - 1));
+      }
+    },
+    back: back,
+    home: function () {
+      resetPress();
+      menuWrap.classList.remove('open');
+      drawer.classList.remove('open');
+      state.mode = 'home';
+      if (state.focus !== 0) { setFocus(0); }
+    },
+    resume: function () { tick(); refreshNet(); resetPress(); }
+  };
+
+  /* ---------- Demo apps (เปิดในเบราว์เซอร์เพื่อดูดีไซน์) ---------- */
+  function demoIcon(letter, hue) {
+    var svg = "<svg xmlns='http://www.w3.org/2000/svg' width='128' height='128'><rect width='128' height='128' fill='hsl(" + hue +
+      ",65%,42%)'/><text x='64' y='86' font-size='64' font-weight='700' text-anchor='middle' fill='white' font-family='sans-serif'>" + letter + "</text></svg>";
+    return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+  }
+  function demoApps() {
+    var names = ['Disney+', 'Plex', 'VLC', 'Kodi', 'Chrome', 'Files', 'Photos', 'Games', 'Twitch', 'Music', 'Camera',
+      'Maps', 'Weather', 'Clock', 'Notes', 'TV Guide', 'Cast', 'Browser', 'Radio', 'Podcasts', 'Fitness', 'News', 'Kids', 'Karaoke'];
+    return names.map(function (n, i) {
+      return { pkg: 'demo.' + n.toLowerCase().replace(/[^a-z]/g, ''), label: n, icon: demoIcon(n.charAt(0), (i * 47) % 360) };
+    });
+  }
+
+  /* ---------- Init ---------- */
+  state.pins = loadPins();
+  renderDock();
+  setLabelNow();
+  tick(); refreshNet();
+  setInterval(tick, 5000);
+  setInterval(refreshNet, 5000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) { tick(); refreshNet(); resetPress(); } });
+
+  if (NATIVE) window.Android.requestApps();
+  else window.GOS.setApps(demoApps());
+})();
+</script>
+</body>
+</html>
