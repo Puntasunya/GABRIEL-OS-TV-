@@ -10,16 +10,16 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
 
       - uses: gradle/actions/setup-gradle@v4
         with:
@@ -31,13 +31,13 @@ jobs:
       - name: Rename APK
         run: cp app/build/outputs/apk/debug/app-debug.apk GabrielOS-TV.apk
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: GabrielOS-TV-apk
           path: GabrielOS-TV.apk
 
       - name: Publish to Releases (download APK directly)
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: build-${{ github.run_number }}
           name: GabrielOS TV build ${{ github.run_number }}
